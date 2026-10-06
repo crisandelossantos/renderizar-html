@@ -10,26 +10,13 @@
  * valor exacto -- para que no sea un proxy abierto que cualquiera pueda usar gratis.
  */
 const express = require('express');
-const fs = require('fs');
 const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 const SECRETO = process.env.SECRETO || '';
-
-app.get('/diagnostico', function (req, res) {
-  var ruta = '';
-  var errorRuta = '';
-  try { ruta = puppeteer.executablePath(); } catch (e) { errorRuta = e.message; }
-  var existe = false, esArchivo = false, stat = null, errorStat = '';
-  try { stat = fs.statSync(ruta); existe = true; esArchivo = stat.isFile(); } catch (e) { errorStat = e.message; }
-  var permisos = stat ? (stat.mode & 0o777).toString(8) : null;
-  res.json({
-    PUPPETEER_CACHE_DIR: process.env.PUPPETEER_CACHE_DIR || '(no configurada)',
-    rutaCalculada: ruta, errorRuta: errorRuta, existe: existe, esArchivo: esArchivo, permisos: permisos, errorStat: errorStat
-  });
-});
+const RUTA_CHROMIUM = process.env.CHROMIUM_PATH || '';
 
 /** Anade <base> (para que las rutas relativas de imagenes/fuentes sigan apuntando a la pagina real) y
  * quita banners de cookies habituales (heuristica generica por id/clase: cookie, consent, gdpr, cmp). */
@@ -55,7 +42,8 @@ app.post('/renderizar', async function (req, res) {
   try {
     navegador = await puppeteer.launch({
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      headless: true
+      headless: true,
+      executablePath: RUTA_CHROMIUM || undefined
     });
     var pagina = await navegador.newPage();
     await pagina.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });

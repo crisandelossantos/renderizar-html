@@ -1,0 +1,20 @@
+{
+  "name": "renderizar-html",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servicio minimo: recibe una URL, la carga en un navegador real (headless) y devuelve el HTML ya renderizado por JavaScript. Para cuando el clonado simple de GoPhish sale vacio (logins modernos hechos con JavaScript).",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "puppeteer": "^23.5.0"
+  },
+  "allowScripts": {
+    "puppeteer@23.11.1": true
+  }
+}

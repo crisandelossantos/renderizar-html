@@ -19,13 +19,20 @@ const SECRETO = process.env.SECRETO || '';
 const RUTA_CHROMIUM = process.env.CHROMIUM_PATH || '';
 
 /** Anade <base> (para que las rutas relativas de imagenes/fuentes sigan apuntando a la pagina real) y
- * quita banners de cookies habituales (heuristica generica por id/clase: cookie, consent, gdpr, cmp). */
+ * oculta banners de cookies habituales (heuristica generica por id/clase: cookie, consent, gdpr, cmp,
+ * onetrust) con CSS, en vez de intentar recortarlos del HTML: un banner real (p. ej. OneTrust) son varios
+ * <div> anidados unos dentro de otros, y una regex sin parser de verdad no sabe dónde acaba el de fuera, así
+ * que lo dejaba a medias y tapando el formulario real. Ocultarlo con display:none es fiable pase lo que pase
+ * con el anidamiento, y el formulario sigue intacto en el HTML por si el refuerzo necesita leerlo. */
 function limpiarHtml(html, urlOrigen) {
   var limpio = html;
   if (!/<base\s/i.test(limpio)) {
     limpio = limpio.replace(/<head[^>]*>/i, function (etiqueta) { return etiqueta + '<base href="' + urlOrigen + '">'; });
   }
-  limpio = limpio.replace(/<([a-z0-9-]+)\b[^>]*(?:id|class)="[^"]*(?:cookie|consent|gdpr|cmp)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, '');
+  var PATRONES_BANNER = ['cookie', 'consent', 'gdpr', 'cmp', 'onetrust'];
+  var selector = PATRONES_BANNER.map(function (p) { return '[id*="' + p + '" i],[class*="' + p + '" i]'; }).join(',');
+  var estiloOculto = '<style>' + selector + '{display:none !important}</style>';
+  limpio = /<\/head>/i.test(limpio) ? limpio.replace(/<\/head>/i, estiloOculto + '</head>') : estiloOculto + limpio;
   return limpio;
 }
 

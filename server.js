@@ -46,7 +46,12 @@ app.post('/renderizar', async function (req, res) {
       executablePath: RUTA_CHROMIUM || undefined
     });
     var pagina = await navegador.newPage();
-    await pagina.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+    // networkidle2 (y no 'load'): algunos logins reales encadenan varias navegaciones del lado del cliente
+    // antes de llegar al formulario final (p. ej. el SSO/OIDC de DHL, con varios saltos entre dominios); con
+    // 'load' nos quedábamos en la primera parada del camino. El timeout se sube bastante (antes 20s) porque
+    // además suele haber trackers/consentimiento de cookies con tráfico de fondo continuo, que retrasan que
+    // la red se considere "idle" aunque la página ya esté pintada del todo.
+    await pagina.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(function (r) { setTimeout(r, 1500); }); // margen extra para componentes lentos en pintarse
     var html = await pagina.evaluate(function () { return document.documentElement.outerHTML; });
     res.json({ ok: true, html: limpiarHtml(html, url) });

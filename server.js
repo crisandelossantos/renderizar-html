@@ -41,8 +41,14 @@ function limpiarHtml(html, urlOrigen) {
  * detectarColorProbable_ en el núcleo) solo ve estilos en línea o un <meta name="theme-color">, y la mayoría
  * de marcas lo definen en una hoja de estilos externa o con variables CSS (--algo), que una regex no resuelve
  * nunca. Aquí sí: el navegador ya ha aplicado todo el CSS, así que getComputedStyle da el color de verdad.
- * Prioriza el botón principal (type=submit, o el primero visible) -- es la pieza que más fiable concentra el
- * color de marca -- y si no hay ninguno con fondo visible, cae a la cabecera (header/nav).
+ *
+ * Prioridad (misma filosofía que detectarColorProbable_, no el botón primero): 1) <meta name="theme-color">,
+ * ya calculado por si viene en un formato raro; 2) el fondo de la cabecera de la página (header/nav/[role
+ * banner]/body) -- este color es el que se usa luego como franja detrás del logo en el correo, así que tiene
+ * que ser el fondo "de verdad" de la página, no el de un botón suelto; 3) solo si no hay nada de lo anterior,
+ * el botón principal como último recurso. Se probó con un botón primero y falló en páginas con fondo oscuro
+ * y botón claro (p. ej. claude.ai): el logo (pensado para ese fondo oscuro) quedaba invisible sobre un fondo
+ * claro sacado del botón.
  */
 function colorComputadoEnNavegador_() {
   function aHex(rgb) {
@@ -54,15 +60,34 @@ function colorComputadoEnNavegador_() {
   }
   function colorVisibleDe(el) {
     if (!el) return '';
-    var cs = getComputedStyle(el);
-    return aHex(cs.backgroundColor);
+    return aHex(getComputedStyle(el).backgroundColor);
   }
+  function colorDeValorCss(valor) {
+    if (!valor) return '';
+    var tmp = document.createElement('div');
+    tmp.style.backgroundColor = valor;
+    document.body.appendChild(tmp);
+    var hex = aHex(getComputedStyle(tmp).backgroundColor);
+    document.body.removeChild(tmp);
+    return hex;
+  }
+
+  var meta = document.querySelector('meta[name="theme-color"]');
+  var c1 = meta && colorDeValorCss(meta.getAttribute('content'));
+  if (c1) return c1;
+
+  var c2 = colorVisibleDe(document.querySelector('header'))
+    || colorVisibleDe(document.querySelector('nav'))
+    || colorVisibleDe(document.querySelector('[role="banner"]'))
+    || colorVisibleDe(document.body);
+  if (c2) return c2;
+
   var candidatos = document.querySelectorAll('button[type="submit"], input[type="submit"], button, [class*="primary" i][class*="btn" i], [class*="btn" i][class*="primary" i]');
   for (var i = 0; i < candidatos.length; i++) {
-    var c = colorVisibleDe(candidatos[i]);
-    if (c) return c;
+    var c3 = colorVisibleDe(candidatos[i]);
+    if (c3) return c3;
   }
-  return colorVisibleDe(document.querySelector('header')) || colorVisibleDe(document.querySelector('nav')) || '';
+  return '';
 }
 
 app.post('/renderizar', async function (req, res) {

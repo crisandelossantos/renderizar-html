@@ -42,13 +42,17 @@ function limpiarHtml(html, urlOrigen) {
  * de marcas lo definen en una hoja de estilos externa o con variables CSS (--algo), que una regex no resuelve
  * nunca. Aquí sí: el navegador ya ha aplicado todo el CSS, así que getComputedStyle da el color de verdad.
  *
- * Prioridad (misma filosofía que detectarColorProbable_, no el botón primero): 1) <meta name="theme-color">,
- * ya calculado por si viene en un formato raro; 2) el fondo de la cabecera de la página (header/nav/[role
- * banner]/body) -- este color es el que se usa luego como franja detrás del logo en el correo, así que tiene
- * que ser el fondo "de verdad" de la página, no el de un botón suelto; 3) solo si no hay nada de lo anterior,
- * el botón principal como último recurso. Se probó con un botón primero y falló en páginas con fondo oscuro
- * y botón claro (p. ej. claude.ai): el logo (pensado para ese fondo oscuro) quedaba invisible sobre un fondo
- * claro sacado del botón.
+ * Prioridad:
+ *   1) <meta name="theme-color">, ya calculado por si viene en un formato raro.
+ *   2) El fondo que rodea al logo de verdad (sube desde el <img>/<svg> del logo hasta encontrar el primer
+ *      ancestro con un fondo visible) -- es exactamente la franja que luego se reconstruye en el correo, así
+ *      que es la referencia más fiable, SEA O NO un <header>/<nav> de verdad. Muchas páginas modernas (p. ej.
+ *      DHL) pintan la cabecera con un <div> con clases de un sistema de estilos, no con una etiqueta semántica:
+ *      buscar solo header/nav se queda sin nada y cae a un botón que no tiene por qué ser el color de marca
+ *      (en DHL la cabecera es amarilla pero el botón es rojo).
+ *   3) Si no hay logo detectable, el fondo de header/nav/[role=banner]/body como red de seguridad.
+ *   4) Solo como último recurso, el botón principal -- puede inducir a error (ver claude.ai: fondo oscuro,
+ *      botón claro, el logo pensado para el fondo oscuro quedaba invisible sobre el color del botón).
  */
 function colorComputadoEnNavegador_() {
   function aHex(rgb) {
@@ -71,21 +75,35 @@ function colorComputadoEnNavegador_() {
     document.body.removeChild(tmp);
     return hex;
   }
+  function colorDetrasDelLogo_() {
+    var candidatos = document.querySelectorAll('img[alt*="logo" i], img[src*="logo" i], svg[aria-label*="logo" i]');
+    for (var i = 0; i < candidatos.length; i++) {
+      var el = candidatos[i].parentElement;
+      for (var pasos = 0; el && pasos < 6; pasos++, el = el.parentElement) {
+        var c = colorVisibleDe(el);
+        if (c) return c;
+      }
+    }
+    return '';
+  }
 
   var meta = document.querySelector('meta[name="theme-color"]');
   var c1 = meta && colorDeValorCss(meta.getAttribute('content'));
   if (c1) return c1;
 
-  var c2 = colorVisibleDe(document.querySelector('header'))
+  var c2 = colorDetrasDelLogo_();
+  if (c2) return c2;
+
+  var c3 = colorVisibleDe(document.querySelector('header'))
     || colorVisibleDe(document.querySelector('nav'))
     || colorVisibleDe(document.querySelector('[role="banner"]'))
     || colorVisibleDe(document.body);
-  if (c2) return c2;
+  if (c3) return c3;
 
-  var candidatos = document.querySelectorAll('button[type="submit"], input[type="submit"], button, [class*="primary" i][class*="btn" i], [class*="btn" i][class*="primary" i]');
-  for (var i = 0; i < candidatos.length; i++) {
-    var c3 = colorVisibleDe(candidatos[i]);
-    if (c3) return c3;
+  var candidatosBoton = document.querySelectorAll('button[type="submit"], input[type="submit"], button, [class*="primary" i][class*="btn" i], [class*="btn" i][class*="primary" i]');
+  for (var j = 0; j < candidatosBoton.length; j++) {
+    var c4 = colorVisibleDe(candidatosBoton[j]);
+    if (c4) return c4;
   }
   return '';
 }

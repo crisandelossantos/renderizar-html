@@ -36,6 +36,35 @@ function limpiarHtml(html, urlOrigen) {
   return limpio;
 }
 
+/**
+ * Calcula el color principal real a partir de la página ya pintada: una regex sobre el HTML (lo que hacía
+ * detectarColorProbable_ en el núcleo) solo ve estilos en línea o un <meta name="theme-color">, y la mayoría
+ * de marcas lo definen en una hoja de estilos externa o con variables CSS (--algo), que una regex no resuelve
+ * nunca. Aquí sí: el navegador ya ha aplicado todo el CSS, así que getComputedStyle da el color de verdad.
+ * Prioriza el botón principal (type=submit, o el primero visible) -- es la pieza que más fiable concentra el
+ * color de marca -- y si no hay ninguno con fondo visible, cae a la cabecera (header/nav).
+ */
+function colorComputadoEnNavegador_() {
+  function aHex(rgb) {
+    var m = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\)/.exec(rgb || '');
+    if (!m) return '';
+    if (m[4] !== undefined && parseFloat(m[4]) === 0) return ''; // transparente: no cuenta como "el color"
+    var h = function (n) { return ('0' + parseInt(n, 10).toString(16)).slice(-2); };
+    return '#' + h(m[1]) + h(m[2]) + h(m[3]);
+  }
+  function colorVisibleDe(el) {
+    if (!el) return '';
+    var cs = getComputedStyle(el);
+    return aHex(cs.backgroundColor);
+  }
+  var candidatos = document.querySelectorAll('button[type="submit"], input[type="submit"], button, [class*="primary" i][class*="btn" i], [class*="btn" i][class*="primary" i]');
+  for (var i = 0; i < candidatos.length; i++) {
+    var c = colorVisibleDe(candidatos[i]);
+    if (c) return c;
+  }
+  return colorVisibleDe(document.querySelector('header')) || colorVisibleDe(document.querySelector('nav')) || '';
+}
+
 app.post('/renderizar', async function (req, res) {
   if (SECRETO && req.headers['x-secreto'] !== SECRETO) {
     return res.status(401).json({ ok: false, error: 'No autorizado.' });
@@ -61,7 +90,8 @@ app.post('/renderizar', async function (req, res) {
     await pagina.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
     await new Promise(function (r) { setTimeout(r, 1500); }); // margen extra para componentes lentos en pintarse
     var html = await pagina.evaluate(function () { return document.documentElement.outerHTML; });
-    res.json({ ok: true, html: limpiarHtml(html, url) });
+    var colorHex = await pagina.evaluate(colorComputadoEnNavegador_);
+    res.json({ ok: true, html: limpiarHtml(html, url), colorHex: colorHex || '' });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   } finally {
